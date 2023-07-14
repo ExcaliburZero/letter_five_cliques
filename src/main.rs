@@ -5,12 +5,18 @@ use std::{
     io::BufRead,
 };
 
+use indicatif::ProgressBar;
 use indicatif::ProgressIterator;
 
 fn main() {
     println!("Reading in words file...");
-    let words = read_words_file("data/words_alpha.txt").unwrap();
+    let words = read_words_file("data/wordle-all.txt").unwrap();
     println!("words.len() = {}", words.len());
+
+    let letter_frequencies = calculate_letter_frequencies(&words);
+    for (letter, count) in letter_frequencies.iter() {
+        println!("{} = {}", letter, count)
+    }
 
     println!("Building up the graph...");
     let graph = Graph::build_from_words(&words);
@@ -21,15 +27,15 @@ fn main() {
         .sum();
     println!("num_edges = {}", num_edges);
 
-    let clique = graph.search_for_clique(5);
-    if let Some(c) = clique {
+    let cliques = graph.search_for_clique(5);
+    for clique in cliques.iter() {
         println!("Found a clique:");
-        for word in c.iter() {
+        for word in clique.iter() {
             println!("{}", word);
         }
 
         println!("\nletters:");
-        let mut letters: Vec<char> = c
+        let mut letters: Vec<char> = clique
             .iter()
             .flat_map(|word| word.chars().collect::<Vec<char>>())
             .collect();
@@ -38,13 +44,12 @@ fn main() {
             print!("{}", l);
         }
         println!();
-    } else {
-        println!("Did not find a clique.");
     }
 }
 
 type Word = String;
 type Words = Vec<(Word, BTreeSet<char>)>;
+type Clique = BTreeSet<Word>;
 
 struct Graph {
     edges: BTreeMap<Word, BTreeSet<Word>>,
@@ -71,41 +76,69 @@ impl Graph {
         Graph { edges }
     }
 
-    fn search_for_clique(&self, clique_size: usize) -> Option<BTreeSet<Word>> {
-        self.search_for_clique_inner(
+    fn search_for_clique(&self, clique_size: usize) -> BTreeSet<Clique> {
+        let mut bar = ProgressBar::new(self.edges.len() as u64);
+        let solutions = self.search_for_clique_inner(
             clique_size,
-            BTreeSet::new(),
-            self.edges.keys().cloned().collect(),
-        )
+            &BTreeSet::new(),
+            &self.edges.keys().cloned().collect(),
+            &mut BTreeSet::new(),
+            &mut bar,
+        );
+        bar.finish();
+
+        solutions
     }
 
     fn search_for_clique_inner(
         &self,
         clique_size: usize,
-        existing_members: BTreeSet<Word>,
-        neighbors: BTreeSet<Word>,
-    ) -> Option<BTreeSet<Word>> {
+        existing_members: &BTreeSet<Word>,
+        neighbors: &BTreeSet<Word>,
+        visited: &mut BTreeSet<Clique>,
+        bar: &mut ProgressBar,
+    ) -> BTreeSet<Clique> {
         if clique_size == 0 {
-            return Some(existing_members);
+            println!("{:?}", existing_members);
+
+            let mut solutions = BTreeSet::new();
+            solutions.insert(existing_members.clone());
+
+            return solutions;
         }
 
+        let mut solutions = BTreeSet::new();
         for neighbor in neighbors.iter() {
+            if clique_size == 5 {
+                bar.inc(1);
+                println!("{}", neighbor);
+            }
+
             let mut new_members = existing_members.clone();
             new_members.insert(neighbor.clone());
+
+            if visited.contains(&new_members) {
+                continue;
+            }
+
+            visited.insert(new_members.clone());
 
             let new_neighbors = neighbors
                 .intersection(self.edges.get(neighbor).unwrap())
                 .cloned()
                 .collect();
 
-            let solution =
-                self.search_for_clique_inner(clique_size - 1, new_members, new_neighbors);
-            if solution.is_some() {
-                return solution;
-            }
+            let mut sub_solutions = self.search_for_clique_inner(
+                clique_size - 1,
+                &new_members,
+                &new_neighbors,
+                visited,
+                bar,
+            );
+            solutions.append(&mut sub_solutions);
         }
 
-        return None;
+        solutions
     }
 }
 
@@ -123,4 +156,18 @@ fn read_words_file(filepath: &str) -> io::Result<Words> {
     }
 
     Ok(words)
+}
+
+fn calculate_letter_frequencies(words: &Words) -> BTreeMap<char, i64> {
+    let mut frquencies: BTreeMap<char, i64> = BTreeMap::new();
+    for (_, letters) in words.iter() {
+        for letter in letters.iter() {
+            frquencies
+                .entry(*letter)
+                .and_modify(|v| *v += 1)
+                .or_insert(1);
+        }
+    }
+
+    frquencies
 }
