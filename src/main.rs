@@ -23,7 +23,7 @@ fn main() {
     let graph = Graph::build_from_words(&words);
 
     println!("Searching for five-cliques...");
-    let cliques = graph.search_for_clique_non_recursive();
+    let cliques = graph.search_for_clique();
     println!("Found {} five-cliques.", cliques.len());
 
     let output_filepath = "five_cliques.csv";
@@ -94,10 +94,11 @@ impl Graph {
         }
     }
 
-    fn search_for_clique_non_recursive(&self) -> BTreeSet<Clique> {
+    fn search_for_clique(&self) -> BTreeSet<Clique> {
         // We start with all the words as possible choices
         let neighbors_0: WordIndexSet = (0..self.words.len()).collect();
 
+        // Parallelize the search over each starting word
         neighbors_0
             .iter()
             .collect::<Vec<WordIndex>>()
@@ -121,6 +122,8 @@ impl Graph {
         let mut neighbors_3: WordIndexSet = BitSet::with_capacity(self.words.len());
         let mut neighbors_4: WordIndexSet = BitSet::with_capacity(self.words.len());
 
+        // For each of the words (second through fifth), narrow down the possibilities and try
+        // each of them (skipping duplicate combinations).
         self.populate_new_possibilities(&neighbors_0, word_0, &mut neighbors_1);
         for word_1 in neighbors_1.iter() {
             if word_1 < word_0 {
@@ -145,6 +148,7 @@ impl Graph {
                             continue;
                         }
 
+                        // Found a five-clique!
                         let current = Graph::words_to_set(&vec![
                             &self.words[word_0],
                             &self.words[word_1],
@@ -168,9 +172,11 @@ impl Graph {
         word_index: WordIndex,
         destination: &mut WordIndexSet,
     ) {
+        // Copy the previous neighbors
         destination.clear();
         destination.union_with(previous_neighbors);
 
+        // Intersect with the new neighbors
         let word_neighbors = self.edges.get(&word_index).unwrap();
         destination.intersect_with(word_neighbors);
     }
