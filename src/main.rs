@@ -7,6 +7,7 @@ use std::{
 
 use bit_set::BitSet;
 use indicatif::ProgressIterator;
+use rayon::prelude::*;
 
 fn main() {
     println!("Reading in words file...");
@@ -78,10 +79,23 @@ impl Graph {
     }
 
     fn search_for_clique_non_recursive(&self) -> BTreeSet<Clique> {
-        let mut solutions = BTreeSet::new();
-
         // We start with all the words as possible choices
         let neighbors_0: WordIndexSet = (0..self.words.len()).collect();
+
+        neighbors_0
+            .iter()
+            .collect::<Vec<WordIndex>>()
+            .par_iter()
+            .flat_map(|word_index| self.search_for_clique_with_word(*word_index, &neighbors_0))
+            .collect()
+    }
+
+    fn search_for_clique_with_word(
+        &self,
+        word_0: WordIndex,
+        neighbors_0: &WordIndexSet,
+    ) -> BTreeSet<Clique> {
+        let mut solutions = BTreeSet::new();
 
         // Pre-allocate all the neighbor sets we will need. By allocate them once and
         // clearing + populating them as needed, we can save significantly on runtime
@@ -90,42 +104,40 @@ impl Graph {
         let mut neighbors_3: WordIndexSet = BitSet::with_capacity(self.words.len());
         let mut neighbors_4: WordIndexSet = BitSet::with_capacity(self.words.len());
 
-        for word_0 in neighbors_0.iter().collect::<Vec<usize>>().iter().progress() {
-            self.populate_new_possibilities(&neighbors_0, *word_0, &mut neighbors_1);
-            for word_1 in neighbors_1.iter() {
-                if word_1 < *word_0 {
+        self.populate_new_possibilities(&neighbors_0, word_0, &mut neighbors_1);
+        for word_1 in neighbors_1.iter() {
+            if word_1 < word_0 {
+                continue;
+            }
+
+            self.populate_new_possibilities(&neighbors_1, word_1, &mut neighbors_2);
+            for word_2 in neighbors_2.iter() {
+                if word_2 < word_1 {
                     continue;
                 }
 
-                self.populate_new_possibilities(&neighbors_1, word_1, &mut neighbors_2);
-                for word_2 in neighbors_2.iter() {
-                    if word_2 < word_1 {
+                self.populate_new_possibilities(&neighbors_2, word_2, &mut neighbors_3);
+                for word_3 in neighbors_3.iter() {
+                    if word_3 < word_2 {
                         continue;
                     }
 
-                    self.populate_new_possibilities(&neighbors_2, word_2, &mut neighbors_3);
-                    for word_3 in neighbors_3.iter() {
-                        if word_3 < word_2 {
+                    self.populate_new_possibilities(&neighbors_3, word_3, &mut neighbors_4);
+                    for word_4 in neighbors_4.iter() {
+                        if word_4 < word_3 {
                             continue;
                         }
 
-                        self.populate_new_possibilities(&neighbors_3, word_3, &mut neighbors_4);
-                        for word_4 in neighbors_4.iter() {
-                            if word_4 < word_3 {
-                                continue;
-                            }
+                        let current = Graph::words_to_set(&vec![
+                            &self.words[word_0],
+                            &self.words[word_1],
+                            &self.words[word_2],
+                            &self.words[word_3],
+                            &self.words[word_4],
+                        ]);
+                        println!("{:?}", current);
 
-                            let current = Graph::words_to_set(&vec![
-                                &self.words[*word_0],
-                                &self.words[word_1],
-                                &self.words[word_2],
-                                &self.words[word_3],
-                                &self.words[word_4],
-                            ]);
-                            println!("{:?}", current);
-
-                            solutions.insert(current);
-                        }
+                        solutions.insert(current);
                     }
                 }
             }
