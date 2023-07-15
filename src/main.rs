@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    env,
     fs::File,
     io,
     io::{BufRead, Write},
@@ -10,8 +11,12 @@ use indicatif::{ParallelProgressIterator, ProgressIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 fn main() {
-    println!("Reading in words file...");
-    let words = read_words_file("data/wordle-all.txt").unwrap();
+    let args: Vec<String> = env::args().collect();
+
+    let input_words_filepath = &args[1];
+
+    println!("Reading in words file: {}", input_words_filepath);
+    let words = read_words_file(input_words_filepath).unwrap();
     println!("words.len() = {}", words.len());
 
     let letter_frequencies = calculate_letter_frequencies(&words);
