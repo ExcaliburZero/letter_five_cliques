@@ -11,7 +11,6 @@ use indicatif::ProgressIterator;
 fn main() {
     println!("Reading in words file...");
     let words = read_words_file("data/wordle-all.txt").unwrap();
-    //let words = read_words_file("data/words_alpha.txt").unwrap();
     println!("words.len() = {}", words.len());
 
     let letter_frequencies = calculate_letter_frequencies(&words);
@@ -21,12 +20,6 @@ fn main() {
 
     println!("Building up the graph...");
     let graph = Graph::build_from_words(&words);
-    println!("Counting the number of edges...");
-    /*let num_edges: usize = words
-        .iter()
-        .map(|word| graph.edges.get(&word.0).unwrap().len())
-        .sum();
-    println!("num_edges = {}", num_edges);*/
 
     let cliques = graph.search_for_clique_non_recursive();
     for clique in cliques.iter() {
@@ -98,33 +91,25 @@ impl Graph {
         let mut neighbors_4: WordIndexSet = BitSet::with_capacity(self.words.len());
 
         for word_0 in neighbors_0.iter().collect::<Vec<usize>>().iter().progress() {
-            neighbors_1.clear();
-            neighbors_1.union_with(&neighbors_0);
-            self.intersection_(&mut neighbors_1, *word_0);
+            self.populate_new_possibilities(&neighbors_0, *word_0, &mut neighbors_1);
             for word_1 in neighbors_1.iter() {
                 if word_1 < *word_0 {
                     continue;
                 }
 
-                neighbors_2.clear();
-                neighbors_2.union_with(&neighbors_1);
-                self.intersection_(&mut neighbors_2, word_1);
+                self.populate_new_possibilities(&neighbors_1, word_1, &mut neighbors_2);
                 for word_2 in neighbors_2.iter() {
                     if word_2 < word_1 {
                         continue;
                     }
 
-                    neighbors_3.clear();
-                    neighbors_3.union_with(&neighbors_2);
-                    self.intersection_(&mut neighbors_3, word_2);
+                    self.populate_new_possibilities(&neighbors_2, word_2, &mut neighbors_3);
                     for word_3 in neighbors_3.iter() {
                         if word_3 < word_2 {
                             continue;
                         }
 
-                        neighbors_4.clear();
-                        neighbors_4.union_with(&neighbors_3);
-                        self.intersection_(&mut neighbors_4, word_3);
+                        self.populate_new_possibilities(&neighbors_3, word_3, &mut neighbors_4);
                         for word_4 in neighbors_4.iter() {
                             if word_4 < word_3 {
                                 continue;
@@ -149,148 +134,22 @@ impl Graph {
         solutions
     }
 
-    fn intersection_(&self, neighbors: &mut WordIndexSet, word_index: WordIndex) {
+    fn populate_new_possibilities(
+        &self,
+        previous_neighbors: &WordIndexSet,
+        word_index: WordIndex,
+        destination: &mut WordIndexSet,
+    ) {
+        destination.clear();
+        destination.union_with(previous_neighbors);
+
         let word_neighbors = self.edges.get(&word_index).unwrap();
-        neighbors.intersect_with(word_neighbors);
+        destination.intersect_with(word_neighbors);
     }
-
-    /*
-    fn search_for_clique_non_recursive(&self) -> BTreeSet<Clique> {
-        let mut visited: HashSet<WordIndexSet>  = HashSet::new();
-        let mut solutions = BTreeSet::new();
-
-        let neighbors_0: WordIndexSet = (0..self.words.len()).collect();
-        for word_0 in neighbors_0.iter().progress() {
-            let current = Graph::word_ids_to_set(&vec![word_0]);
-            if visited.contains(&current) {
-                continue;
-            }
-            visited.insert(current);
-
-            let neighbors_1: WordIndexSet = self.intersection(&neighbors_0, *word_0);
-            for word_1 in neighbors_1.iter() {
-                let current = Graph::word_ids_to_set(&vec![word_0, word_1]);
-                if visited.contains(&current) {
-                    continue;
-                }
-                visited.insert(current);
-
-                let neighbors_2: WordIndexSet = self.intersection(&neighbors_1, *word_1);
-                for word_2 in neighbors_2.iter() {
-                    let current = Graph::word_ids_to_set(&vec![word_0, word_1, word_2]);
-                    if visited.contains(&current) {
-                        continue;
-                    }
-                    visited.insert(current);
-
-                    let neighbors_3: WordIndexSet = self.intersection(&neighbors_2, *word_2);
-                    for word_3 in neighbors_3.iter() {
-                        let current = Graph::word_ids_to_set(&vec![word_0, word_1, word_2, word_3]);
-                        if visited.contains(&current) {
-                            continue;
-                        }
-                        visited.insert(current);
-
-                        let neighbors_4: WordIndexSet = self.intersection(&neighbors_3, *word_3);
-                        for word_4 in neighbors_4.iter() {
-                            let current = Graph::words_to_set(&vec![
-                                &self.words[*word_0],
-                                &self.words[*word_1],
-                                &self.words[*word_2],
-                                &self.words[*word_3],
-                                &self.words[*word_4],
-                            ]);
-                            println!("{:?}", current);
-
-                            solutions.insert(current);
-                        }
-                    }
-                }
-            }
-        }
-
-        solutions
-    }*/
 
     fn words_to_set(words: &Vec<&Word>) -> BTreeSet<Word> {
         words.iter().cloned().cloned().collect()
     }
-
-    fn word_ids_to_set(word_indices: &Vec<&WordIndex>) -> WordIndexSet {
-        word_indices.iter().cloned().cloned().collect()
-    }
-
-    //fn intersection(&self, neighbors: &WordIndexSet, word_index: WordIndex) -> WordIndexSet {
-    //    neighbors.intersection(self.edges.get(&word_index).unwrap()).cloned().collect()
-    //}
-
-    /*
-
-    fn search_for_clique(&self, clique_size: usize) -> BTreeSet<Clique> {
-        let mut bar = ProgressBar::new(self.edges.len() as u64);
-        let solutions = self.search_for_clique_inner(
-            clique_size,
-            &BTreeSet::new(),
-            &self.edges.keys().cloned().collect(),
-            &mut BTreeSet::new(),
-            &mut bar,
-        );
-        bar.finish();
-
-        solutions
-    }
-
-    fn search_for_clique_inner(
-        &self,
-        clique_size: usize,
-        existing_members: &BTreeSet<Word>,
-        neighbors: &BTreeSet<Word>,
-        visited: &mut BTreeSet<Clique>,
-        bar: &mut ProgressBar,
-    ) -> BTreeSet<Clique> {
-        if clique_size == 0 {
-            println!("{:?}", existing_members);
-
-            let mut solutions = BTreeSet::new();
-            solutions.insert(existing_members.clone());
-
-            return solutions;
-        }
-
-        let mut solutions = BTreeSet::new();
-        for neighbor in neighbors.iter() {
-            if clique_size == 5 {
-                bar.inc(1);
-                println!("{}", neighbor);
-            }
-
-            let mut new_members = existing_members.clone();
-            new_members.insert(neighbor.clone());
-
-            if visited.contains(&new_members) {
-                continue;
-            }
-
-            visited.insert(new_members.clone());
-
-            let new_neighbors = neighbors
-                .intersection(self.edges.get(neighbor).unwrap())
-                .cloned()
-                .collect();
-
-            let mut sub_solutions = self.search_for_clique_inner(
-                clique_size - 1,
-                &new_members,
-                &new_neighbors,
-                visited,
-                bar,
-            );
-            solutions.append(&mut sub_solutions);
-        }
-
-        solutions
-    }
-    */
 }
 
 fn read_words_file(filepath: &str) -> io::Result<Words> {
